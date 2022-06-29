@@ -479,7 +479,7 @@ defmodule Ecto.Migration do
       table = %Table{} = unquote(object)
       Runner.start_command({unquote(command), Ecto.Migration.__prefix__(table)})
 
-      if primary_key = table.primary_key && Ecto.Migration.__primary_key__() do
+      if primary_key = table.primary_key && Ecto.Migration.__primary_key__(table.name) do
         {name, type, opts} = primary_key
         add(name, type, opts)
       end
@@ -564,7 +564,7 @@ defmodule Ecto.Migration do
 
   defp do_create(table, command) do
     columns =
-      if primary_key = table.primary_key && Ecto.Migration.__primary_key__() do
+      if primary_key = table.primary_key && Ecto.Migration.__primary_key__(table.name) do
         {name, type, opts} = primary_key
         [{:add, name, type, opts}]
       else
@@ -1212,7 +1212,7 @@ defmodule Ecto.Migration do
   end
 
   def references(table, opts) when is_binary(table) and is_list(opts) do
-    opts = Keyword.merge(foreign_key_repo_opts(), opts)
+    opts = Keyword.merge(foreign_key_repo_opts(table), opts)
     reference = struct(%Reference{table: table}, opts)
 
     unless reference.on_delete in [:nothing, :delete_all, :nilify_all, :restrict] do
@@ -1226,8 +1226,8 @@ defmodule Ecto.Migration do
     reference
   end
 
-  defp foreign_key_repo_opts() do
-    case Runner.repo_config(:migration_primary_key, []) do
+  defp foreign_key_repo_opts(table_name) do
+    case migration_primary_key(table_name) do
       false -> []
       opts -> opts
     end
@@ -1358,8 +1358,8 @@ defmodule Ecto.Migration do
   end
 
   @doc false
-  def __primary_key__() do
-    case Runner.repo_config(:migration_primary_key, []) do
+  def __primary_key__(table_name) do
+    case migration_primary_key(table_name) do
       false ->
         false
 
@@ -1368,6 +1368,14 @@ defmodule Ecto.Migration do
         {name, opts} = Keyword.pop(opts, :name, :id)
         {type, opts} = Keyword.pop(opts, :type, :bigserial)
         {name, type, opts}
+    end
+  end
+  
+  defp migration_primary_key(table_name) do
+    case Runner.repo_config(:migration_primary_key, []) do
+      {m, f, a} when is_atom(m) and is_atom(f) and is_list(a) ->
+        apply(m, f, a ++ [table_name])
+      other -> other
     end
   end
 end
